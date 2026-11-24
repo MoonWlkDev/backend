@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PromoCodeDiscountType } from '@prisma/client';
 import { PromoCodesService } from './promo-codes.service';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { OrganizationsService } from '../organizations/organizations.service';
+import { OrganizationsService } from '../organizations/organizations.service';
 
 describe('PromoCodesService', () => {
   let service: PromoCodesService;
@@ -19,7 +19,7 @@ describe('PromoCodesService', () => {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
   };
-  let organizations: { assertMember: jest.Mock };
+  let organizations: OrganizationsService;
 
   beforeEach(() => {
     prisma = {
@@ -35,10 +35,13 @@ describe('PromoCodesService', () => {
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'pc-1' }]),
     };
-    organizations = { assertMember: jest.fn() };
+    organizations = new OrganizationsService(
+      prisma as unknown as PrismaService,
+    );
+    jest.spyOn(organizations, 'assertMember').mockResolvedValue(undefined);
     service = new PromoCodesService(
       prisma as unknown as PrismaService,
-      organizations as unknown as OrganizationsService,
+      organizations,
     );
   });
 
@@ -274,7 +277,7 @@ describe('PromoCodesService', () => {
         },
       );
       prisma.promoCodeRedemption.create.mockImplementation(
-        async ({ data }: { data: { userId: string } }) => {
+        ({ data }: { data: { userId: string } }) => {
           redemptions.push(data.userId);
           return { id: data.userId };
         },
@@ -290,9 +293,7 @@ describe('PromoCodesService', () => {
       expect(row.redemptionCount).toBe(3);
       expect(redemptions).toHaveLength(3);
       for (const r of results.filter((r) => r.status === 'rejected')) {
-        expect((r as PromiseRejectedResult).reason).toBeInstanceOf(
-          BadRequestException,
-        );
+        expect(r.reason).toBeInstanceOf(BadRequestException);
       }
     });
   });

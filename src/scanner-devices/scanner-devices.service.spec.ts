@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ScannerDevicesService } from './scanner-devices.service';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { OrganizationsService } from '../organizations/organizations.service';
+import { OrganizationsService } from '../organizations/organizations.service';
 import type { StellarService } from '../stellar/stellar.service';
 
 describe('ScannerDevicesService', () => {
@@ -19,7 +19,8 @@ describe('ScannerDevicesService', () => {
       update: jest.Mock;
     };
   };
-  let organizations: { assertMember: jest.Mock };
+  let organizations: OrganizationsService;
+  let assertMember: jest.SpyInstance;
   let stellar: Record<string, jest.Mock>;
 
   beforeEach(() => {
@@ -31,7 +32,12 @@ describe('ScannerDevicesService', () => {
         update: jest.fn(),
       },
     };
-    organizations = { assertMember: jest.fn() };
+    organizations = new OrganizationsService(
+      prisma as unknown as PrismaService,
+    );
+    assertMember = jest
+      .spyOn(organizations, 'assertMember')
+      .mockResolvedValue(undefined);
     stellar = {
       buildAddCheckinSignerTx: jest.fn().mockResolvedValue('unsigned-add'),
       buildRemoveCheckinSignerTx: jest
@@ -43,7 +49,7 @@ describe('ScannerDevicesService', () => {
     };
     service = new ScannerDevicesService(
       prisma as unknown as PrismaService,
-      organizations as unknown as OrganizationsService,
+      organizations,
       stellar as unknown as StellarService,
     );
   });
@@ -154,6 +160,8 @@ describe('ScannerDevicesService', () => {
       });
 
       expect(prisma.scannerDevice.create).toHaveBeenCalledWith({
+        // expect.* matchers are typed `any`; the rule can't see through them.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({ stellarPublicKey: DEVICE_KEY }),
       });
     });
@@ -169,10 +177,7 @@ describe('ScannerDevicesService', () => {
       );
 
       expect(result).toEqual({ unsignedXdr: 'unsigned-add' });
-      expect(organizations.assertMember).toHaveBeenCalledWith(
-        'org-1',
-        'user-1',
-      );
+      expect(assertMember).toHaveBeenCalledWith('org-1', 'user-1');
       expect(stellar.buildAddCheckinSignerTx).toHaveBeenCalledWith({
         organizerPublicKey: 'GORGANIZER',
         chainEventId: 42n,
@@ -200,6 +205,7 @@ describe('ScannerDevicesService', () => {
       expect(stellar.isCheckinSigner).toHaveBeenCalledWith(42n, DEVICE_KEY);
       expect(prisma.scannerDevice.update).toHaveBeenCalledWith({
         where: { id: 'device-1' },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: { signerRegisteredAt: expect.any(Date) },
       });
     });
