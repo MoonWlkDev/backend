@@ -288,6 +288,44 @@ describe('PromoCodesService', () => {
           service.redeem('event-1', `user-${i}`, 'save10', `ticket-${i}`),
         ),
       );
+      // Paste inside describe('validate') in promo-codes.service.spec.ts,
+// next to 'computes a FIXED discount and floors at zero'.
+
+    it('FIXED discount equal to the price makes the ticket free', async () => {
+      prisma.promoCode.findUnique.mockResolvedValue({
+        id: 'pc-1',
+        isActive: true,
+        expiresAt: null,
+        maxRedemptions: null,
+        redemptionCount: 0,
+        discountType: PromoCodeDiscountType.FIXED,
+        discountValue: 1_000,
+      });
+      prisma.promoCodeRedemption.findUnique.mockResolvedValue(null);
+
+      const result = await service.validate('event-1', 'user-1', 'FREE', 1000n);
+
+      expect(result.discountAmount).toBe(1000n);
+      expect(result.discountedPrice).toBe(0n);
+    });
+
+    it('FIXED discount below the price subtracts exactly', async () => {
+      prisma.promoCode.findUnique.mockResolvedValue({
+        id: 'pc-1',
+        isActive: true,
+        expiresAt: null,
+        maxRedemptions: null,
+        redemptionCount: 0,
+        discountType: PromoCodeDiscountType.FIXED,
+        discountValue: 400,
+      });
+      prisma.promoCodeRedemption.findUnique.mockResolvedValue(null);
+
+      const result = await service.validate('event-1', 'user-1', 'SAVE4', 1000n);
+
+      expect(result.discountAmount).toBe(400n);
+      expect(result.discountedPrice).toBe(600n);
+    });
 
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
       expect(row.redemptionCount).toBe(3);
